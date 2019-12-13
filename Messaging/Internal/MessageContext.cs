@@ -10,6 +10,9 @@ using System.Linq;
 
 namespace Messaging.Internal
 {
+    /// <summary>
+    /// http://rxwiki.wikidot.com/101samples#toc1
+    /// </summary>
     internal class MessageContext: IDisposable
     {
         private readonly ConcurrentDictionary<string, Message> _dic = new ConcurrentDictionary<string, Message>();
