@@ -7,6 +7,8 @@ using System.Reactive;
 using System.Reactive.Linq;
 using System.Reactive.Concurrency;
 using System.Linq;
+using System.Reactive.Disposables;
+using System.Threading;
 
 namespace Messaging.Internal
 {
@@ -15,7 +17,13 @@ namespace Messaging.Internal
     /// </summary>
     internal class MessageContext: IDisposable
     {
-        private readonly ConcurrentDictionary<string, Message> _dic = new ConcurrentDictionary<string, Message>();
+        private readonly ConcurrentDictionary<long, Message> _dic = new ConcurrentDictionary<long, Message>();
+
+
+        private readonly ConcurrentDictionary<string, long> _buffer = new ConcurrentDictionary<string, long>();
+
+
+        // private readonly IList<Committer> _committers = new List<Committer>();
 
         private event EventHandler<MessageEvent> _genericEvent;
 
@@ -72,6 +80,83 @@ namespace Messaging.Internal
         public void Dispose()
         {
             _disposable.Dispose();
+        }
+
+
+        private void Init()
+        {
+            var count = _buffer.GetOrAdd<long>(Committer.CommitterCount, (key, arg) =>
+            {
+                return arg;
+            }, 1);
+
+            for(var i =0; i< count; i++)
+            {
+                var committer = Committer.Create(i);
+
+                InitCommitter(committer);
+               // _committers.Add(committer);
+            }
+
+
+        }
+
+
+        private void InitCommitter(Committer committer)
+        {
+            _buffer.AddOrUpdate<long>(committer.StartIndexKey, (key, arg) =>
+            {
+                return arg;
+            },
+            (key, valye, arg) =>
+            {
+                return arg;
+            }
+
+            , -1);
+
+
+            _buffer.AddOrUpdate<long>(committer.EndIndexKey, (key, arg) =>
+            {
+                return arg;
+            },
+            (key, valye, arg) =>
+            {
+                return arg;
+            }
+
+            , -1);
+
+        }
+
+
+        private void InitListener()
+        {
+            IObservable<int> ob =
+    Observable.Create<int>(o =>
+    {
+        var cancel = new CancellationDisposable(); // internally creates a new CancellationTokenSource
+        NewThreadScheduler.Default.Schedule(() =>
+        {
+            int i = 0;
+            for (; ; )
+            {
+                Thread.Sleep(200);  // here we do the long lasting background operation
+                if (!cancel.Token.IsCancellationRequested)    // check cancel token periodically
+                    o.OnNext(i++);
+                else
+                {
+                    Console.WriteLine("Aborting because cancel event was signaled!");
+                    o.OnCompleted(); // will not make it to the subscriber
+                    return;
+                }
+            }
+        }
+        );
+
+        return cancel;
+    }
+    );
         }
     }
 }
