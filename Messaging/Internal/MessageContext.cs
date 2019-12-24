@@ -23,7 +23,7 @@ namespace Messaging.Internal
         private readonly ConcurrentDictionary<string, long> _buffer = new ConcurrentDictionary<string, long>();
 
 
-        // private readonly IList<Committer> _committers = new List<Committer>();
+        private readonly IList<CommitterDefintion.StaticCommitter> _committers = new List<CommitterDefintion.StaticCommitter>();
 
         private event EventHandler<MessageEvent> _genericEvent;
 
@@ -32,8 +32,13 @@ namespace Messaging.Internal
 
         private readonly IDisposable _disposable = null;
 
+
+        protected object _lock { get; private set; }
+
         public MessageContext()
         {
+            _lock = new object();
+
             _eventAsObservable = Observable.FromEventPattern<MessageEvent>(
                 ev => _genericEvent += ev,
                 ev => _genericEvent -= ev);
@@ -50,7 +55,15 @@ namespace Messaging.Internal
             })
             .SelectMany(async evs  =>
             {
-                await Task.Delay(1000* 10);
+
+
+                foreach (var ev in evs)
+                {
+                    // _dic.AddOrUpdate
+                     //  ev.EventArgs
+                }
+
+                await Task.Delay(1000 * 10);
                 return evs;
             })
             .Do(evs =>
@@ -85,24 +98,24 @@ namespace Messaging.Internal
 
         private void Init()
         {
-            var count = _buffer.GetOrAdd<long>(Committer.CommitterCount, (key, arg) =>
+            var count = _buffer.GetOrAdd<long>(CommitterDefintion.StaticCommitter.CommitterCount, (key, arg) =>
             {
                 return arg;
             }, 1);
 
             for(var i =0; i< count; i++)
             {
-                var committer = Committer.Create(i);
+                var committer = CommitterDefintion.StaticCommitter.Create(i);
 
-                InitCommitter(committer);
-               // _committers.Add(committer);
+                InitStaticCommitter(committer);
+                _committers.Add(committer);
             }
 
 
         }
 
 
-        private void InitCommitter(Committer committer)
+        private void InitStaticCommitter(CommitterDefintion.StaticCommitter committer)
         {
             _buffer.AddOrUpdate<long>(committer.StartIndexKey, (key, arg) =>
             {
@@ -132,31 +145,44 @@ namespace Messaging.Internal
 
         private void InitListener()
         {
-            IObservable<int> ob =
-    Observable.Create<int>(o =>
-    {
-        var cancel = new CancellationDisposable(); // internally creates a new CancellationTokenSource
-        NewThreadScheduler.Default.Schedule(() =>
-        {
-            int i = 0;
-            for (; ; )
-            {
-                Thread.Sleep(200);  // here we do the long lasting background operation
-                if (!cancel.Token.IsCancellationRequested)    // check cancel token periodically
-                    o.OnNext(i++);
-                else
-                {
-                    Console.WriteLine("Aborting because cancel event was signaled!");
-                    o.OnCompleted(); // will not make it to the subscriber
-                    return;
-                }
-            }
-        }
-        );
+            IObservable<int> ob = Observable.Create<int>(o =>
+                            {
+                                var cancel = new CancellationDisposable(); // internally creates a new CancellationTokenSource
+                                NewThreadScheduler.Default.Schedule(() =>
+                                {
+                                    int i = 0;
+                                    for (; ; )
+                                    {
 
-        return cancel;
-    }
-    );
+
+                                        foreach(var staticCommitter in _committers)
+                                        {
+                                            
+
+                                        }
+
+
+                                        if (!cancel.Token.IsCancellationRequested)    // check cancel token periodically
+                                            o.OnNext(i++);
+                                        else
+                                        {
+                                            Console.WriteLine("Aborting because cancel event was signaled!");
+                                            o.OnCompleted(); // will not make it to the subscriber
+                                            return;
+                                        }
+                                    }
+                                }
+                                );
+
+                                return cancel;
+                            });
         }
+
+
+        private void 
+
+
+
+
     }
 }
