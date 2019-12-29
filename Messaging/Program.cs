@@ -11,25 +11,27 @@ namespace Messaging
     {
         static void Main(string[] args)
         {
-            var ctx = new MessageContext();
-            Task.Run(async () =>
-            {
-                while (true)
-                {
-                    await ctx.AppendMessageAsync(new Message
-                    {
-                        Id = Guid.NewGuid().ToString()
-                    });
-                    await Task.Delay(100);
-                }
+            //var ctx = new MessageContext();
+            //Task.Run(async () =>
+            //{
+            //    while (true)
+            //    {
+            //        await ctx.AppendMessageAsync(new Message
+            //        {
+            //            Id = Guid.NewGuid().ToString()
+            //        });
+            //        await Task.Delay(100);
+            //    }
                 
 
-            }).Wait();
+            //}).Wait();
 
 
             Thread.Sleep(Timeout.Infinite);
 
-            Console.WriteLine("Hello World!");
+           // var v = long.MaxValue + 33;
+
+            Console.WriteLine("Hello World!" + ().ToString());
         }
 
 

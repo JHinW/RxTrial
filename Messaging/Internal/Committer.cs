@@ -27,6 +27,8 @@ namespace Messaging.Internal
 
             //public long EndIndex { get; set; }
 
+            public bool InCircle { get; private set; } = false;
+
 
             public string StartIndexKey => $"{CommitterStartIndex}{Index}";
 
@@ -36,6 +38,11 @@ namespace Messaging.Internal
             public static StaticCommitter Create(int index)
             {
                 return new StaticCommitter(index);
+            }
+
+            public void SetCircleStatus(bool status)
+            {
+                this.InCircle = status;
             }
         }
 

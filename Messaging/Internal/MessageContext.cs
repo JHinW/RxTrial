@@ -23,7 +23,7 @@ namespace Messaging.Internal
         private readonly ConcurrentDictionary<string, long> _buffer = new ConcurrentDictionary<string, long>();
 
 
-        private readonly IList<CommitterDefintion.StaticCommitter> _committers = new List<CommitterDefintion.StaticCommitter>();
+        private CommitterDefintion.StaticCommitter _committer = null;
 
         private event EventHandler<MessageEvent> _genericEvent;
 
@@ -55,20 +55,37 @@ namespace Messaging.Internal
             })
             .SelectMany(async evs  =>
             {
+                var len = evs.Count();
 
-
-                foreach (var ev in evs)
+                var space = TryGetFreeSpace(len);
+                if(space.Item1)
                 {
-                    // _dic.AddOrUpdate
-                     //  ev.EventArgs
+                    return false;
                 }
 
-                await Task.Delay(1000 * 10);
-                return evs;
+                var index = 0;
+                for(var i = space.Item2; i<= space.Item3; ++i)
+                {
+                    var key = i ;
+                    _dic.AddOrUpdate(key, evs[index].EventArgs.Message, (_key, message) => evs[index].EventArgs.Message);
+                    ++index;
+                }
+
+
+                await Task.Delay(1000 * 1);
+                return true;
             })
-            .Do(evs =>
+            .Do(isOk =>
             {
-                Console.WriteLine("Batch Done!" + evs.Count());
+                if (isOk)
+                {
+                    Console.WriteLine("Batch Done!");
+                }
+                else
+                {
+                    Console.WriteLine("Batch Failed!");
+                }
+                
             })
             .Subscribe();
 
@@ -105,10 +122,9 @@ namespace Messaging.Internal
 
             for(var i =0; i< count; i++)
             {
-                var committer = CommitterDefintion.StaticCommitter.Create(i);
+                _committer = CommitterDefintion.StaticCommitter.Create(i);
 
-                InitStaticCommitter(committer);
-                _committers.Add(committer);
+                InitStaticCommitter(_committer);
             }
 
 
@@ -153,17 +169,19 @@ namespace Messaging.Internal
                                     int i = 0;
                                     for (; ; )
                                     {
-
-
-                                        foreach(var staticCommitter in _committers)
+                                        if (!cancel.Token.IsCancellationRequested)    // check cancel token periodically
                                         {
+                                            var startIndex = GetCommitterVal(_committer.StartIndexKey);
+
+                                            var endIndex = GetCommitterVal(_committer.EndIndexKey);
+
+
+
+                                            o.OnNext(i++);
+                                        }
                                             
 
-                                        }
-
-
-                                        if (!cancel.Token.IsCancellationRequested)    // check cancel token periodically
-                                            o.OnNext(i++);
+                                       
                                         else
                                         {
                                             Console.WriteLine("Aborting because cancel event was signaled!");
@@ -179,7 +197,155 @@ namespace Messaging.Internal
         }
 
 
-        private void 
+
+        private long GetCommitterVal(string key)
+        {
+            if (_buffer.TryGetValue(key, out long val))
+            {
+                return val;
+            }
+
+            return -1;
+        }
+
+
+        private bool SetCommitterVal(string key, long newVal, )
+        {
+            if (_buffer.TryUpdate(key, val, val))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private Message GetMessageVal(long key)
+        {
+            if (_dic.TryGetValue(key, out Message val))
+            {
+                return val;
+            }
+
+            return null;
+        }
+
+
+        private long PrepareAppend(int messageCount)
+        {
+            //lock (this.Lock)
+            //{
+
+            //}
+
+            //foreach (var staticCommitter in _committers)
+            //{
+            //    var val = GetCommitterVal(staticCommitter.EndIndexKey);
+
+            //    if(long.MaxValue - val > messageCount)
+            //    {
+            //        return val + 1;
+            //    }
+            //    else
+            //    {
+            //        var startIndex = GetCommitterVal(staticCommitter.StartIndexKey);
+
+
+            //    }
+                
+                
+
+            //}
+
+            //var startIndex = this.lastIndex.Next();
+            //for (var i = 0; i < messageCount; i++)
+            //{
+            //    this.inflightAppends.Add(new CommitInfo
+            //    {
+            //        RecordInfo = new RecordInfo(this.lastIndex.Next()),
+            //        IsCommited = false,
+            //        AppendTime = DateTime.UtcNow
+            //    });
+
+            //    this.lastIndex = this.lastIndex.Next();
+            //}
+
+            return NoAvailableIndex;
+        }
+
+
+        private Tuple<bool, long, long> TryGetFreeSpace(int messageCount)
+        {
+            var startIndex = GetCommitterVal(_committer.StartIndexKey);
+            var endIndex = GetCommitterVal(_committer.EndIndexKey);
+
+            if(_committer.InCircle)
+            {
+                if(startIndex - endIndex > messageCount)
+                {
+                    return new Tuple<bool, long, long>(true, endIndex + 1, endIndex + messageCount);
+                }
+
+                return new Tuple<bool, long, long>(false, -1, -1);
+            }
+            else
+            {
+
+                if (long.MaxValue - endIndex > messageCount)
+                {
+                    this._committer.SetCircleStatus(true);
+                    return new Tuple<bool, long, long>(true, endIndex +1, endIndex + messageCount);
+                }
+                else
+                {
+                    if(startIndex > messageCount)
+                    {
+                        return new Tuple<bool, long, long>(true, -1, messageCount -1);
+                    }
+                }
+
+                return new Tuple<bool, long, long>(false, -1, -1);
+
+            }
+        }
+
+
+        private Tuple<bool, long, long> TryGetAvailableData(int messageCount = 10)
+        {
+            var startIndex = GetCommitterVal(_committer.StartIndexKey);
+            var endIndex = GetCommitterVal(_committer.EndIndexKey);
+
+            if (_committer.InCircle)
+            {
+                if (startIndex - endIndex > messageCount)
+                {
+                    return new Tuple<bool, long, long>(true, endIndex + 1, endIndex + messageCount);
+                }
+
+                return new Tuple<bool, long, long>(false, -1, -1);
+            }
+            else
+            {
+
+                if (long.MaxValue - endIndex > messageCount)
+                {
+                    this._committer.SetCircleStatus(true);
+                    return new Tuple<bool, long, long>(true, endIndex + 1, endIndex + messageCount);
+                }
+                else
+                {
+                    if (startIndex > messageCount)
+                    {
+                        return new Tuple<bool, long, long>(true, -1, messageCount - 1);
+                    }
+                }
+
+                return new Tuple<bool, long, long>(false, -1, -1);
+
+            }
+        }
+
+
+        private const long NoAvailableIndex= -9999;
 
 
 
